@@ -64,6 +64,18 @@ class Model(object):
                 energy += atom_energy
         return energy
 
+    def get_atomic_energies(self): ## ssrokyz start
+        """Return atomic energies which were obtained when calculating 
+        energy.
+
+        No parameters
+        """
+        
+        if self.atomic_energies is None:
+            raise ValueError('atomic energies not exist. Maybe you should do get_potential_energy() first')
+        else:
+            return np.asarray(self.atomic_energies) ## ssrokyz end
+
     def calculate_forces(self, fingerprints, fingerprintprimes):
         """Calculates the model-predicted forces for an image, based on
         derivatives of fingerprints.

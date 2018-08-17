@@ -12,6 +12,7 @@
 
 import numpy as np
 import uuid
+import json
 
 from . import LossFunction
 from ..utilities import ConvergenceOccurred
@@ -19,6 +20,7 @@ from ..utilities import ConvergenceOccurred
 try:
     import tensorflow as tf
     from tensorflow.contrib.opt import ScipyOptimizerInterface
+    from tensorflow.python.training.saver import latest_checkpoint
 except ImportError:
     # A warning is raised instead of an error so that documentation can
     # build without tensorflow installed.
@@ -157,37 +159,48 @@ class NeuralNetwork:
         (e.g. if the force is >A, then the force is scaled). This helps when a
         small number of images have very large forces that don't need to be
         reconstructed perfectly.
+
+    Vars_num: int or "latest" ## ssrokyz start
+
+    max_to_keep: Variable passed to tensorflow save ftn. Number specifying
+        how many ckpt file to keep.
+
+    cycle_per_epoch: Number of training cycles for an epoch. ## ssrokyz end
+
     """
 
     def __init__(self,
-                 hiddenlayers=(5, 5),
-                 activation='tanh',
-                 keep_prob=1.,
-                 maxTrainingEpochs=10000,
-                 importname=None,
-                 batchsize=2,
-                 initialTrainingRate=1e-4,
-                 miniBatch=False,
-                 tfVars=None,
-                 saveVariableName=None,
-                 parameters=None,
-                 sess=None,
-                 energy_coefficient=1.0,
-                 force_coefficient=0.04,
-                 scikit_model=None,
-                 convergenceCriteria=None,
-                 optimizationMethod='l-BFGS-b',
-                 input_keep_prob=0.8,
-                 ADAM_optimizer_params={'beta1': 0.9},
-                 regularization_strength=None,
-                 numTrainingImages={},
-                 elementFingerprintLengths=None,
-                 fprange=None,
-                 weights=None,
-                 scalings=None,
-                 unit_type="float",
-                 preLoadTrainingData=True,
-                 relativeForceCutoff=None
+                 hiddenlayers              = (5, 5),
+                 activation                = 'tanh',
+                 keep_prob                 = 1.,
+                 maxTrainingEpochs         = 10000,
+                 importname                = None,
+                 batchsize                 = 2,
+                 initialTrainingRate       = 1e-4,
+                 miniBatch                 = False,
+                 tfVars                    = None,
+                 saveVariableName          = None,
+                 parameters                = None,
+                 sess                      = None,
+                 energy_coefficient        = 1.0,
+                 force_coefficient         = 0.04,
+                 scikit_model              = None,
+                 convergenceCriteria       = None,
+                 optimizationMethod        = 'l-BFGS-b',
+                 input_keep_prob           = 0.8,
+                 ADAM_optimizer_params     = {'beta1': 0.9},
+                 regularization_strength   = None,
+                 numTrainingImages         = {},
+                 elementFingerprintLengths = None,
+                 fprange                   = None,
+                 weights                   = None,
+                 scalings                  = None,
+                 unit_type                 = "float",
+                 preLoadTrainingData       = True,
+                 max_to_keep               = 5, ## ssrokyz start
+                 Vars_num                  = None,
+                 cycle_per_epoch           = 1000, ## ssrokyz end
+                 relativeForceCutoff       = None
                  ):
         self.parameters = {} if parameters is None else parameters
         for prop in ['energyMeanScale',
@@ -226,13 +239,13 @@ class NeuralNetwork:
         if 'fprange' not in self.parameters and fprange is not None:
             self.parameters['fprange'] = {}
             for element in fprange:
-                _ = np.array([map(lambda x: x[0], fprange[element]),
-                              map(lambda x: x[1], fprange[element])])
+                _ = np.array([[x[0] for x in fprange[element]],
+                              [x[1] for x in fprange[element]]])
                 self.parameters['fprange'][element] = _
 
         self.hiddenlayers = hiddenlayers
 
-        if isinstance(activation, basestring):
+        if isinstance(activation, str):
             self.activationName = activation
             self.activation = eval('tf.nn.' + activation)
         else:
@@ -242,12 +255,16 @@ class NeuralNetwork:
         self.input_keep_prob = input_keep_prob
 
         if saveVariableName is None:
+            # try: ## ssrokyz start # Use existing variable if there is one.
+                # with open("./ckpt/vars_name") as vars_load:
+                    # self.saveVariableName = vars_load.read()
+            # except FileNotFoundError: ## ssrokyz end
             self.saveVariableName = str(uuid.uuid4())[:8]
         else:
             self.saveVariableName = saveVariableName
 
         if elementFingerprintLengths is not None:
-            self.elements = elementFingerprintLengths.keys()
+            self.elements = list(elementFingerprintLengths.keys())
             self.elements.sort()
             self.elementFingerprintLengths = {}
             for element in self.elements:
@@ -258,12 +275,19 @@ class NeuralNetwork:
 
         self.sess = sess
         self.graph = None
-        if tfVars is not None:
+        
+        self.max_to_keep = max_to_keep ## ssrokyz start
+        self.cycle_per_epoch = cycle_per_epoch
+        self.Vars_num = Vars_num
+        if Vars_num is not None: 
+            tfVars = None
+            self.constructSessGraphModel(tfVars, self.sess)
+        elif tfVars is not None: ## ssrokyz end
             self.constructSessGraphModel(tfVars, self.sess)
 
         if weights is not None:
             self.elementFingerprintLengths = {}
-            self.elements = weights.keys()
+            self.elements = list(weights.keys())
             for element in self.elements:
                 self.elementFingerprintLengths[element] =\
                     weights[element][1].shape[0] - 1
@@ -306,14 +330,22 @@ class NeuralNetwork:
             trainvarlist = tf.trainable_variables()
             trainvarlist = [a for a in trainvarlist
                             if a.name[:8] == self.saveVariableName]
-            self.saver = tf.train.Saver(trainvarlist)
+            self.saver = tf.train.Saver(trainvarlist, ## ssrokyz start
+                                        max_to_keep = self.max_to_keep) ## ssrokyz end
+
             if tfVars is not None:
-                self.sess.run(tf.initialize_all_variables())
-                with open('tfAmpNN-checkpoint-restore', 'w') as fhandle:
+                self.sess.run(tf.global_variables_initializer())
+                with open('ckpt/checkpoint-restore', 'w') as fhandle: ## ssrokyz start
                     fhandle.write(tfVars)
-                self.saver.restore(self.sess, 'tfAmpNN-checkpoint-restore')
+                ckpt = latest_checkpoint("ckpt", latest_filename = 'checkpoint-restore')
+                self.saver.restore(self.sess, ckpt) ## ssrokyz end
+            elif self.Vars_num is not None: ## ssrokyz start
+                self.sess.run(tf.global_variables_initializer())
+                Vars_num = str(self.Vars_num)
+                ckpt = './ckpt/'+Vars_num
+                self.saver.restore(self.sess, ckpt) ## ssrokyz end
             else:
-                self.sess.run(tf.initialize_all_variables())
+                self.sess.run(tf.global_variables_initializer())
 
     # This function is used to test the code by pre-setting the weights in the
     # model for each element, so that results can be checked against
@@ -666,33 +698,33 @@ class NeuralNetwork:
             # Define output nodes for the energy of a configuration, a loss
             # function, and the loss per atom (which is what we usually track)
             # self.loss = tf.sqrt(tf.reduce_sum(
-            #    tf.square(tf.sub(self.energy, self.y_))))
+            #    tf.square(tf.subtract(self.energy, self.y_))))
             # self.lossPerAtom = tf.reduce_sum(
-            # tf.square(tf.div(tf.sub(self.energy, self.y_), self.nAtoms_in)))
+            # tf.square(tf.div(tf.subtract(self.energy, self.y_), self.nAtoms_in)))
 
             # loss function, as included in model/__init__.py
             self.energy_loss = tf.reduce_sum(
-                tf.square(tf.div(tf.sub(self.energy, self.y_),
+                tf.square(tf.div(tf.subtract(self.energy, self.y_),
                                  self.nAtoms_in)))
             # Define the training step for energy training.
 
             # self.loss_forces = self.forcecoefficient * \
-            #    tf.sqrt(tf.reduce_mean(tf.square(tf.sub(self.forces_in,
+            #    tf.sqrt(tf.reduce_mean(tf.square(tf.subtract(self.forces_in,
             #                                       self.forces))))
             # force loss function, as included in model/__init__.py
             if self.parameters['relativeForceCutoff'] is None:
                 self.force_loss = tf.reduce_sum(
-                    tf.div(tf.square(tf.sub(self.forces_in, self.forces)),
+                    tf.div(tf.square(tf.subtract(self.forces_in, self.forces)),
                            self.nAtoms_forces)) / 3.
                 # tf.reduce_sum(tf.div(
-                # tf.reduce_mean(tf.square(tf.sub(self.forces_in,
+                # tf.reduce_mean(tf.square(tf.subtract(self.forces_in,
                 # self.forces)), 2), self.nAtoms_in))
             else:
                 relativeA = self.parameters['relativeForceCutoff']
                 self.force_loss = \
                     tf.reduce_sum(tf.div(tf.div(
                                          tf.square(
-                                             tf.sub(
+                                             tf.subtract(
                                                  self.forces_in, self.forces)),
                                          tf.square(
                                              self.forces_in) +
@@ -701,15 +733,15 @@ class NeuralNetwork:
                                          self.nAtoms_forces)) / 3.
 
                 # tf.reduce_sum(tf.div(tf.reduce_mean(
-                # tf.div(tf.square(tf.sub(self.forces_in, self.forces)),
+                # tf.div(tf.square(tf.subtract(self.forces_in, self.forces)),
                 # tf.square(self.forces_in)+relativeA**2.)*relativeA**2.,2),
                 # self.nAtoms_in))
 
             # Define max residuals
             self.energy_maxresid = tf.reduce_max(
-                tf.abs(tf.div(tf.sub(self.energy, self.y_), self.nAtoms_in)))
+                tf.abs(tf.div(tf.subtract(self.energy, self.y_), self.nAtoms_in)))
             self.force_maxresid = tf.reduce_max(
-                tf.abs(tf.sub(self.forces_in, self.forces)))
+                tf.abs(tf.subtract(self.forces_in, self.forces)))
 
             # Define the training step for force training.
             if self.parameters['regularization_strength'] is not None:
@@ -737,11 +769,11 @@ class NeuralNetwork:
 
             # self.loss_forces_relative = \
             # self.forcecoefficient * \
-            # tf.sqrt(tf.reduce_mean(tf.square(tf.div(tf.sub(self.forces_in,
+            # tf.sqrt(tf.reduce_mean(tf.square(tf.div(tf.subtract(self.forces_in,
             # self.forces),self.forces_in+0.0001))))
             # self.force_loss_relative = \
             # tf.reduce_sum(tf.div(tf.reduce_mean(
-            # tf.div(tf.square(tf.sub(self.forces_in,
+            # tf.div(tf.square(tf.subtract(self.forces_in,
             # self.forces)),tf.square(self.forces_in)+0.005**2.),2),
             # self.nAtoms_in))
             # self.loss_relative = \
@@ -752,7 +784,7 @@ class NeuralNetwork:
 
     def initializeVariables(self):
         """Resets all of the variables in the current tensorflow model."""
-        self.sess.run(tf.initialize_all_variables())
+        self.sess.run(tf.global_variables_initializer())
 
     def generateFeedInput(self, curinds,
                           energies,
@@ -801,28 +833,33 @@ class NeuralNetwork:
 
                 feedinput[self.indsdict[element]] = atomInds[element]
                 feedinput[self.maskdict[element]] = np.ones((batchsize, 1))
-                if forcecoefficient > 1.e-5:
-
-                    dgdx_to_scale = dgdx_batch[element]
-                    for i in range(dgdx_to_scale.shape[0]):
-                        for l in range(dgdx_to_scale.shape[1]):
-                            if (self.parameters['fprange'][element][1][l] -
-                               self.parameters['fprange'][element][0][l]) > 10.**-8:
-                                dgdx_to_scale[i][l][:] = \
-                                    2. * dgdx_to_scale[i][l][:] / \
-                                    (self.parameters['fprange'][element][1][l] -
-                                     self.parameters['fprange'][element][0][l])
-                    feedinput[self.dgdx_dict[element]] = dgdx_to_scale
-                    feedinput[self.dgdx_Eindices_dict[
-                        element]] = dgdx_Eindices_batch[element]
-                    feedinput[self.dgdx_Xindices_dict[
-                        element]] = dgdx_Xindices_batch[element]
+                try: ## ssrokyz start
+                    forcecoefficient > 1.e-5
+                except TypeError:
+                    pass
                 else:
-                    feedinput[self.dgdx_dict[element]] = \
-                        np.zeros((len(dgdx_Eindices[element]),
-                                  self.elementFingerprintLengths[element], 3))
-                    feedinput[self.dgdx_Eindices_dict[element]] = []
-                    feedinput[self.dgdx_Xindices_dict[element]] = []
+                    if forcecoefficient > 1.e-5: 
+
+                        dgdx_to_scale = dgdx_batch[element]
+                        for i in range(dgdx_to_scale.shape[0]):
+                            for l in range(dgdx_to_scale.shape[1]):
+                                if (self.parameters['fprange'][element][1][l] -
+                                self.parameters['fprange'][element][0][l]) > 10.**-8:
+                                    dgdx_to_scale[i][l][:] = \
+                                        2. * dgdx_to_scale[i][l][:] / \
+                                        (self.parameters['fprange'][element][1][l] -
+                                        self.parameters['fprange'][element][0][l])
+                        feedinput[self.dgdx_dict[element]] = dgdx_to_scale
+                        feedinput[self.dgdx_Eindices_dict[
+                            element]] = dgdx_Eindices_batch[element]
+                        feedinput[self.dgdx_Xindices_dict[
+                            element]] = dgdx_Xindices_batch[element]
+                    else:
+                        feedinput[self.dgdx_dict[element]] = \
+                            np.zeros((len(dgdx_Eindices[element]),
+                                    self.elementFingerprintLengths[element], 3))
+                        feedinput[self.dgdx_Eindices_dict[element]] = []
+                        feedinput[self.dgdx_Xindices_dict[element]] = [] ## ssrokyz end
             else:
                 feedinput[self.tensordict[element]] = np.zeros(
                     (1, self.elementFingerprintLengths[element]))
@@ -840,6 +877,7 @@ class NeuralNetwork:
         feedinput[self.input_keep_prob_in] = inputkeepprob
         natoms_forces = []
         for natom in natoms[curinds]:
+            natom = int(natom[0]) ## ssrokyz
             for i in range(natom):
                 natoms_forces.append(natom)
         natoms_forces = np.array(natoms_forces)
@@ -848,15 +886,20 @@ class NeuralNetwork:
         feedinput[self.totalNumAtoms] = np.sum(natoms[curinds])
         if training:
             feedinput[self.y_] = energies[curinds]
-            if forcecoefficient > 1.e-5:
-                feedinput[self.forces_in] = np.concatenate(
-                    forcesExp[curinds], axis=0)
-                feedinput[self.forcecoefficient] = forcecoefficient
-                feedinput[self.energycoefficient] = energycoefficient
+            try: ## ssrokyz start
+                forcecoefficient > 1.e-5
+            except TypeError:
+                pass
+            else:
+                if forcecoefficient > 1.e-5:
+                    feedinput[self.forces_in] = np.concatenate(
+                        forcesExp[curinds], axis=0)
+                    feedinput[self.forcecoefficient] = forcecoefficient
+                    feedinput[self.energycoefficient] = energycoefficient  ## ssrokyz end
         feedinput[self.energyProdScale] = self.parameters['energyProdScale']
         return feedinput
 
-    def fit(self, trainingimages, descriptor, parallel, log=None):
+    def fit(self, trainingimages, descriptor, parallel, log=None, only_setup=False): ## ssrokyz
         """Fit takes a bunch of training images (which are assumed to have a
         working calculator attached), and fits the internal variables to the
         training images.
@@ -868,7 +911,7 @@ class NeuralNetwork:
             for element in descriptor.parameters.Gs:
                 self.elementFingerprintLengths[element] = len(
                     descriptor.parameters.Gs[element])
-            self.elements = self.elementFingerprintLengths.keys()
+            self.elements = list(self.elementFingerprintLengths.keys())
             self.elements.sort()
             self.constructSessGraphModel(self.tfVars, self.sess)
 
@@ -897,7 +940,7 @@ class NeuralNetwork:
         else:
             fingerprintDerDB = descriptor.fingerprintprimes
         images = trainingimages
-        keylist = images.keys()
+        keylist = list(images.keys())
         fingerprintDB = descriptor.fingerprints
         self.parameters['numTrainingImages'] = len(keylist)
         (atomArraysAll,
@@ -911,20 +954,21 @@ class NeuralNetwork:
                                      self.elements,
                                      keylist,
                                      fingerprintDerDB)
-        energies = map(
-            lambda x: [images[x].get_potential_energy(apply_constraint=False)],
-            keylist)
+        energies = [[images[x].get_potential_energy(apply_constraint=False)] for x in keylist]
         energies = np.array(energies)
 
         if self.parameters['preLoadTrainingData'] and not(self.miniBatch):
             numElements = {}
             for element in nAtomsDict:
                 numElements[element] = sum(nAtomsDict[element])
-            self.saver.save(self.sess, 'tfAmpNN-checkpoint')
-            with open('tfAmpNN-checkpoint') as fhandle:
+            self.saver.save(self.sess, './ckpt/ckpt') ## ssrokyz start
+            with open('ckpt/checkpoint') as fhandle: ## ssrokyz end
                 tfvars = fhandle.read()
+            # with open('ckpt/vars_name', 'w') as vars_save: ## ssrokyz start
+                # vars_save.write(self.saveVariableName) ## ssrokyz end
+                
             self.sess.close()
-            numTrainingAtoms = np.sum(map(lambda x: len(images[x]), keylist))
+            numTrainingAtoms = np.sum([len(images[x]) for x in keylist])
             num_dgdx_Eindices = {}
             num_dgdx_Xindices = {}
             for element in self.elements:
@@ -984,7 +1028,7 @@ class NeuralNetwork:
         if not(self.miniBatch):
             batchsize = len(keylist)
 
-        def trainmodel(trainingrate, keepprob, inputkeepprob, maxepochs):
+        def trainmodel(trainingrate, keepprob, inputkeepprob, maxepochs, cycle_per_epoch): ## ssrokyz
             icount = 1
             icount_global = 1
             indlist = np.arange(len(keylist))
@@ -992,13 +1036,13 @@ class NeuralNetwork:
 
             # continue taking training steps as long as we haven't hit the RMSE
             # minimum of the max number of epochs
-            while (icount < maxepochs):
+            while (icount_global < maxepochs * cycle_per_epoch): # icount_global += 1 ## ssrokyz
 
                 # if we're in minibatch mode, shuffle the index list
                 if self.miniBatch:
                     np.random.shuffle(indlist)
 
-                for i in range(int(len(keylist) / batchsize)):
+                for i in range(int(len(keylist) / batchsize)): # icount += 1
 
                     # if we're doing minibatch, construct a new set of inputs
                     if self.miniBatch or (not(self.miniBatch)and(icount == 1)):
@@ -1006,7 +1050,7 @@ class NeuralNetwork:
                             curinds = indlist[
                                 np.arange(batchsize) + i * batchsize]
                         else:
-                            curinds = range(len(keylist))
+                            curinds = list(range(len(keylist)))
 
                         feedinput = self.generateFeedInput(
                             curinds,
@@ -1048,10 +1092,10 @@ class NeuralNetwork:
                     icount += 1
 
                 # Every 10 epochs, report the RMSE on the entire training set
-                if icount_global % 10 == 0:
+                if icount_global % cycle_per_epoch == 0: ## ssrokyz
                     if self.miniBatch:
                         feedinput = self.generateFeedInput(
-                            range(len(keylist)),
+                            list(range(len(keylist))),
                             energies,
                             atomArraysAll,
                             dgdx,
@@ -1090,6 +1134,9 @@ class NeuralNetwork:
                             converge_save.pop(0)
                         convergence_vals = np.mean(converge_save, 0)
                         converged = lf.check_convergence(*convergence_vals)
+                        # if self.parameters['preLoadTrainingData'] and not(self.miniBatch): ## ssrokyz start
+                        self.saver.save(self.sess, './ckpt/'+str(icount_global))
+                        log('tf checkpoint saved') ## ssrokyz end
                         if converged:
                             raise ConvergenceOccurred()
                     else:
@@ -1103,15 +1150,18 @@ class NeuralNetwork:
                                 self.sess.run(self.energy_maxresid,
                                               feed_dict=feedinput),
                                 0.)
+                        # if self.parameters['preLoadTrainingData'] and not(self.miniBatch): ## ssrokyz start
+                        self.saver.save(self.sess, './ckpt/'+str(icount_global)) 
+                        log('tf checkpoint saved') ## ssrokyz end
                         if converged:
                             raise ConvergenceOccurred()
                     feedinput[self.keep_prob_in] = keepprob
                     feedinput[self.input_keep_prob_in] = inputkeepprob
-                icount_global += 1
+                icount_global += 1 # +1 when 1 while loop end
             return
 
         def trainmodelBFGS(maxEpochs):
-            curinds = range(len(keylist))
+            curinds = list(range(len(keylist)))
             feedinput = self.generateFeedInput(
                 curinds,
                 energies,
@@ -1132,7 +1182,7 @@ class NeuralNetwork:
                 forcecoefficient=self.parameters['force_coefficient'])
 
             def step_callbackfun_forces(x):
-                evalvarlist = map(lambda y: float(np.array(y(x))), varlist)
+                evalvarlist = [float(np.array(y(x))) for y in varlist]
                 converged = lf.check_convergence(*evalvarlist)
                 if converged:
                     raise ConvergenceOccurred()
@@ -1194,16 +1244,25 @@ class NeuralNetwork:
                 trainmodel(self.initialTrainingRate,
                            self.keep_prob,
                            self.input_keep_prob,
-                           self.maxTrainingEpochs)
+                           self.maxTrainingEpochs,
+                           self.cycle_per_epoch) ## ssrokyz
             else:
                 log('uknown optimizer!')
         except ConvergenceOccurred:
-            if self.parameters['preLoadTrainingData'] and not(self.miniBatch):
-                self.saver.save(self.sess, 'tfAmpNN-checkpoint')
-                with open('tfAmpNN-checkpoint') as fhandle:
-                    tfvars = fhandle.read()
-                self.constructSessGraphModel(tfvars, None, trainOnly=False)
+            # if self.parameters['preLoadTrainingData'] and not(self.miniBatch):
+            self.saver.save(self.sess, './ckpt/latest', latest_filename = "checkpoint-latest") ## ssrokyz start
+            log('tf checkpoint saved')
+            with open('ckpt/checkpoint-latest') as fhandle: ## ssrokyz end
+                tfvars = fhandle.read()
+            self.constructSessGraphModel(tfvars, None, trainOnly=False)
             return True
+        # if self.parameters['preLoadTrainingData'] and not(self.miniBatch): ## ssrokyz start
+        self.saver.save(self.sess, './ckpt/latest', latest_filename = "checkpoint-latest") 
+        log('tf checkpoint saved')
+        with open('ckpt/checkpoint-latest') as fhandle:
+            tfvars = fhandle.read()
+        self.constructSessGraphModel(tfvars, None, trainOnly=False) ## ssrokyz end
+
         return False
 
     def preLoadFeed(self, feedinput):
@@ -1313,7 +1372,7 @@ class NeuralNetwork:
 
         energies = np.zeros(len(hashs))
         forcelist = np.zeros(len(hashs))
-        curinds = range(len(hashs))
+        curinds = list(range(len(hashs)))
         (atomArraysFinal,
          dgdx_batch,
          dgdx_Eindices_batch,
@@ -1377,7 +1436,7 @@ class NeuralNetwork:
                     np.array(self.sess.run(self.energy,
                                            feed_dict=feedinput)) + \
                     self.parameters['energyMeanScale']
-                energysave.append(map(lambda x: x[0], energies))
+                energysave.append([x[0] for x in energies])
                 if forces:
                     force = self.sess.run(self.forces,
                                           feed_dict=feedinput)
@@ -1447,8 +1506,8 @@ class NeuralNetwork:
         params['optimizationMethod'] = self.optimizationMethod
 
         # Create a string format of the tensorflow variables.
-        self.saver.save(self.sess, 'tfAmpNN-checkpoint')
-        with open('tfAmpNN-checkpoint') as fhandle:
+        self.saver.save(self.sess, './ckpt/tostr', latest_filename = "checkpoint-tostr") ## ssrokyz start
+        with open('ckpt/checkpoint-tostr') as fhandle: ## ssrokyz end
             params['tfVars'] = fhandle.read()
 
         return str(params)
@@ -1512,23 +1571,23 @@ def model(x, segmentinds, keep_prob, input_keep_prob, batchsize,
 
     # multiply through with the dg/dx tensor, and sum along the components of g
     # to get a tensor of dE/dx (one row per atom considered, second dim =3)
-    dEdx = tf.reduce_sum(tf.mul(dEdg_arranged_tile, dgdx), 1)
+    dEdx = tf.reduce_sum(tf.multiply(dEdg_arranged_tile, dgdx), 1)
 
     # this should be a tensor of size (total atoms in training set)x3,
     # representing the contribution of each atom to the total energy via
     # interactions with elements of the current atom type
     dEdx_arranged = tf.unsorted_segment_sum(dEdx, dgdx_Xindices, totalNumAtoms)
 
-    return tf.mul(reducedSum, mask), dEdx_arranged, l2_regularization
+    return tf.multiply(reducedSum, mask), dEdx_arranged, l2_regularization
 #    dEg
 #    dEjdgj1 = tf.expand_dims(dEjdgj, 1)
 #    dEjdgj2 = tf.expand_dims(dEjdgj1, 1)
 #    dEjdgjtile = tf.tile(dEjdgj2, tilederiv)
-#    dEdxik = tf.mul(dxdxik, dEjdgjtile)
+#    dEdxik = tf.multiply(dxdxik, dEjdgjtile)
 #    dEdxikReduce = tf.reduce_sum(dEdxik, 3)
 #    dEdxik_reduced = tf.unsorted_segment_sum(
 #        dEdxikReduce, segmentinds, batchsize)
-#    return tf.mul(reducedSum, mask), dEdxik_reduced,l2_regularization
+#    return tf.multiply(reducedSum, mask), dEdxik_reduced,l2_regularization
 
 
 def weight_variable(shape, name, unit_type, stddev=0.1):
@@ -1572,7 +1631,7 @@ def generateBatch(curinds, elements, atomArraysAll, nAtomsDict,
             for curind in curinds:
                 natomsElement = nAtomsDict[element][curind]
                 natomsTotal = np.sum(
-                    map(lambda x: nAtomsDict[x][curind], elements))
+                    [nAtomsDict[x][curind] for x in elements])
                 if len(dgdx_Eindices[element][curind]) > 0:
                     dgdx_out[element].append(dgdx[element][curind])
                     dgdx_Eindices_out[element].append(
@@ -1656,7 +1715,7 @@ def generateTensorFlowArrays(fingerprintDB, elements, keylist,
 
     for j in range(len(keylist)):
         fp = fingerprintDB[keylist[j]]
-        atomSymbols, fpdata = zip(*fp)
+        atomSymbols, fpdata = list(zip(*fp))
         for i in range(len(fp)):
             nAtomsDict[atomSymbols[i]][j] += 1
 
@@ -1683,8 +1742,8 @@ def generateTensorFlowArrays(fingerprintDB, elements, keylist,
     natoms = np.zeros((len(keylist), 1))
     for j in range(len(keylist)):
         fp = fingerprintDB[keylist[j]]
-        atomSymbols, fpdata = zip(*fp)
-        atomdata = zip(atomSymbols, range(len(atomSymbols)))
+        atomSymbols, fpdata = list(zip(*fp))
+        atomdata = list(zip(atomSymbols, list(range(len(atomSymbols)))))
         for element in elements:
             atomArraysTemp = []
             curatoms = [atom for atom in atomdata if atom[0] == element]
@@ -1716,8 +1775,8 @@ def generateTensorFlowArrays(fingerprintDB, elements, keylist,
         for j in range(len(keylist)):
             fp = fingerprintDB[keylist[j]]
             fpDer = fingerprintDerDB[keylist[j]]
-            atomSymbols, fpdata = zip(*fp)
-            atomdata = zip(atomSymbols, range(len(atomSymbols)))
+            atomSymbols, fpdata = list(zip(*fp))
+            atomdata = list(zip(atomSymbols, list(range(len(atomSymbols)))))
 
             for element in elements:
                 curatoms = [atom for atom in atomdata if atom[0] == element]
