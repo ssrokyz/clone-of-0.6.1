@@ -255,10 +255,6 @@ class NeuralNetwork:
         self.input_keep_prob = input_keep_prob
 
         if saveVariableName is None:
-            # try: ## ssrokyz start # Use existing variable if there is one.
-                # with open("./ckpt/vars_name") as vars_load:
-                    # self.saveVariableName = vars_load.read()
-            # except FileNotFoundError: ## ssrokyz end
             self.saveVariableName = str(uuid.uuid4())[:8]
         else:
             self.saveVariableName = saveVariableName
@@ -1504,6 +1500,9 @@ class NeuralNetwork:
         params['parameters'] = self.parameters
         params['miniBatch'] = self.miniBatch
         params['optimizationMethod'] = self.optimizationMethod
+        params['Vars_num']=self.Vars_num ## ssrokyz start
+        params['cycle_per_epoch']=self.cycle_per_epoch
+        params['max_to_keep']=self.max_to_keep ## ssrokyz end
 
         # Create a string format of the tensorflow variables.
         self.saver.save(self.sess, './ckpt/tostr', latest_filename = "checkpoint-tostr") ## ssrokyz start
