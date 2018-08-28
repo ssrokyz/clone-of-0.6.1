@@ -556,8 +556,8 @@ class Logger:
                 tic = self._tic
             else:
                 tic = self.tics[toc]
-            dt = (time.time() - tic) / 60.
-            dt = ' %.1f min.' % dt
+            dt = (time.time() - tic) / 60. # ssrokyz start
+            dt = ' %.1f sec.' % dt # ssrokyz end
         if self.file.closed:
             self.file = open(self.filename, 'a')
         self.file.write(message + dt + '\n')
