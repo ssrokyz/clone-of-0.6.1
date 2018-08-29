@@ -1468,9 +1468,6 @@ class NeuralNetwork:
         else:
             atomic_energies = np.squeeze(self.atomic_energies)
             self.atomic_energies = None
-            from ..utilities import Logger
-            log = Logger("logger.txt")
-            log(str(atomic_energies))
         return atomic_energies ## ssrokyz end
 
     def getVariance(self, fingerprint, nSamples=10, l=1.):
@@ -1479,11 +1476,12 @@ class NeuralNetwork:
         # for i in range(nSamples):
         # energies.append(self.get_energy_list([key], {key:
         # fingerprint},keep_prob=self.keep_prob)[0])
-        energies, force = \
-            self.get_energy_list([key],
-                                 {key: fingerprint},
-                                 keep_prob=self.keep_prob,
-                                 nsamples=nSamples)
+        energies, force, atomic_energies = self.get_energy_list( ## ssorkyz start
+            [key],
+            {key: fingerprint},
+            keep_prob=self.keep_prob,
+            nsamples=nSamples,
+            ) ## ssrokyz end
         if (('regularization_strength' in self.parameters) and
            (self.parameters['regularization_strength'] is not None)):
             tau = l**2. * self.keep_prob / \
