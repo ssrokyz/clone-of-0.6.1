@@ -93,8 +93,8 @@ class Amp(Calculator, object):
 
         self.dblabel = label if dblabel is None else dblabel
 
-    def get_atomic_potentials(self, atoms=None):  ## ssrokyz start
-        return Calculator.get_property(self, 'energies', atoms)  ## ssrokyz end
+    # def get_atomic_potentials(self, atoms=None):  ## ssrokyz start
+        # return Calculator.get_property(self, 'energies', atoms)  ## ssrokyz end
 
     @property
     def cores(self):

@@ -646,9 +646,12 @@ class NeuralNetwork:
                     networkListToUse = self.hiddenlayers[element]
                 else:
                     networkListToUse = self.hiddenlayers
-                (outdict[element],
-                 forcedict[element],
-                 l2_regularization_dict[element]) = \
+                (
+                    outdict[element],
+                    forcedict[element],
+                    l2_regularization_dict[element],
+                    energies, ## ssrokyz end
+                    ) = \
                     model(tensordict[element],
                           indsdict[element],
                           self.keep_prob_in,
@@ -675,6 +678,9 @@ class NeuralNetwork:
 
             # The total energy is the sum of the energies over each atom type.
             keylist = self.elements
+
+            self.energies = energies * self.energyProdScale ## ssrokyz
+
             ytot = outdict[keylist[0]]
             for i in range(1, len(keylist)):
                 ytot = ytot + outdict[keylist[i]]
@@ -1402,10 +1408,14 @@ class NeuralNetwork:
 
         if self.weights is not None:
             self.setWeightsScalings(feedinput, self.weights, self.scalings)
-        if nsamples == 1:
-            energies = \
-                np.array(self.sess.run(self.energy, feed_dict=feedinput)) + \
-                self.parameters['energyMeanScale']
+        if nsamples == 1: ## ssrokyz start
+            energies, atomic_energies = \
+                self.sess.run([self.energy, self.energies], feed_dict=feedinput)
+            energies = np.array(energies) + self.parameters['energyMeanScale']
+            atomic_energies = np.array(atomic_energies) + self.parameters['energyMeanScale'] / natoms
+            # energies = \
+                # np.array(self.sess.run(self.energy, feed_dict=feedinput)) + \
+                # self.parameters['energyMeanScale'] ## ssrokyz end
 
             # Add in the per-atom base energy.
             natomsArray = np.zeros((len(hashs), len(self.elements)))
@@ -1440,14 +1450,28 @@ class NeuralNetwork:
             energies = np.array(energysave)
             force = np.array(forcesave)
 
-        return energies, force
+        return energies, force, atomic_energies ## ssrokyz
 
     def calculate_energy(self, fingerprint):
         """Get the energy by feeding in a list to the get_list version (which
         is more efficient for anything greater than 1 image)."""
         key = '1'
-        energies, forces = self.get_energy_list([key], {key: fingerprint})
+        energies, forces, self.atomic_energies = self.get_energy_list([key], {key: fingerprint}) ## ssrokyz
         return energies[0]
+
+    def get_atomic_energies(self): ## ssrokyz start
+        """Get the atomic energies by feeding in a list to the get_list version (which
+        is more efficient for anything greater than 1 image). added by ssrokyz"""
+        if self.atomic_energies is None:
+            from ase.calculators.calculator import PropertyNotImplementedError
+            raise PropertyNotImplementedError("amp_tf :: atomic energy calculation before total energy calculate")
+        else:
+            atomic_energies = np.squeeze(self.atomic_energies)
+            self.atomic_energies = None
+            from ..utilities import Logger
+            log = Logger("logger.txt")
+            log(str(atomic_energies))
+        return atomic_energies ## ssrokyz end
 
     def getVariance(self, fingerprint, nSamples=10, l=1.):
         key = '1'
@@ -1475,9 +1499,9 @@ class NeuralNetwork:
     def calculate_forces(self, fingerprint, derfingerprint):
         # calculate_forces function still needs to be implemented. Can't do
         # this without the fingerprint derivates working properly though
-        key = '1'
-        energies, forces = \
-            self.get_energy_list([key],
+        key = '1' ## ssrokyz start
+        energies, forces, atomic_energies = \
+            self.get_energy_list([key], ## ssrokyz end
                                  {key: fingerprint},
                                  fingerprintDerDB={key: derfingerprint},
                                  forces=True)
@@ -1577,7 +1601,7 @@ def model(x, segmentinds, keep_prob, input_keep_prob, batchsize,
     # interactions with elements of the current atom type
     dEdx_arranged = tf.unsorted_segment_sum(dEdx, dgdx_Xindices, totalNumAtoms)
 
-    return tf.multiply(reducedSum, mask), dEdx_arranged, l2_regularization
+    return tf.multiply(reducedSum, mask), dEdx_arranged, l2_regularization, y_out ## ssrokyz
 #    dEg
 #    dEjdgj1 = tf.expand_dims(dEjdgj, 1)
 #    dEjdgj2 = tf.expand_dims(dEjdgj1, 1)
