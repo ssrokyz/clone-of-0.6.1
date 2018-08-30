@@ -257,9 +257,23 @@ class Amp(Calculator, object):
 
         if properties == ['energy']:
             log('Calculating potential energy...', tic='pot-energy')
-            self.descriptor.calculate_fingerprints(images=images,
-                                                   log=log,
-                                                   calculate_derivatives=False)
+            if hasattr(self, "neighborlist_keys"):
+                n_keys = self.neighborlist_keys
+            else:
+                n_keys = None
+            if hasattr(self, "fingerprints_keys"):
+                f_keys = self.fingerprints_keys
+            else:
+                f_keys = None
+            self.neighborlist_keys, self.fingerprints_keys = \
+                self.descriptor.calculate_fingerprints(
+                    images=images,
+                    log=log,
+                    calculate_derivatives=False,
+                    neighborlist_keys = n_keys,
+                    fingerprints_keys = f_keys,
+                    # parallel = self._parallel,
+                    )
             energy = self.model.calculate_energy(
                 self.descriptor.fingerprints[key])
             self.results['energy'] = energy

@@ -390,12 +390,15 @@ class Data:
     """
 
     def __init__(self, filename, db=FileDatabase, calculator=None):
+        ########## e.i. FingerprintCalculator || NeighborlistCalculator
         self.calc = calculator
+        ########## this class base FileDatabase class
         self.db = db
         self.filename = filename
+        ###### defined when self.open is called
         self.d = None
 
-    def calculate_items(self, images, parallel, log=None):
+    def calculate_items(self, images, parallel, log=None, db_keys=None):
         """Calculates the data value with 'calculator' for the specified
         images.
 
@@ -404,21 +407,36 @@ class Data:
         """
         if log is None:
             log = Logger(None)
+        ######### close open file
         if self.d is not None:
             self.d.close()
             self.d = None
         log(' Data stored in file %s.' % self.filename)
-        d = self.db.open(self.filename, 'r')
-        calcs_needed = list(set(images.keys()).difference(d.keys()))
-        dblength = len(d)
-        d.close()
+        ############ read list of data
+        if db_keys is None:
+            # log("original", tic='dbkeys')
+            d = self.db.open(self.filename, 'read')
+            calcs_needed = list(set(images.keys()).difference(d.keys()))
+            dblength = len(d)
+            d.close()
+            # log("original", toc='dbkeys')
+        else:
+            # log("revised", tic='dbkeys')
+            dblength = len(db_keys)
+            calcs_needed = list(set(images.keys()).difference(db_keys))
+            db_keys = db_keys.union(set(images.keys()))
+            # log("revised", toc='dbkeys')
+        ################# calculate
         log(' File exists with %i total images, %i of which are needed.' %
             (dblength, len(images) - len(calcs_needed)))
         log(' %i new calculations needed.' % len(calcs_needed))
         if len(calcs_needed) == 0:
-            return
+            if db_keys is None:
+                calc_needed = [list(images.keys())[0]]
+            else:
+                return
         if parallel['cores'] == 1:
-            d = self.db.open(self.filename, 'c')
+            d = self.db.open(self.filename, 'create')
             for key in calcs_needed:
                 d[key] = self.calc.calculate(images[key], key)
             d.close()  # Necessary to get out of write mode and unlock?
@@ -471,11 +489,12 @@ class Data:
             log('  %i new results.' % len(results))
             log(' ...parallel calculations finished.', toc='parallel')
             log(' Adding new results to database.')
-            d = self.db.open(self.filename, 'c')
+            d = self.db.open(self.filename, 'create')
             d.update(results)
             d.close()  # Necessary to get out of write mode and unlock?
 
         self.d = None
+        return db_keys
 
     def __getitem__(self, key):
         self.open()

@@ -105,8 +105,15 @@ class Gaussian(object):
         """
         return self.parameters.tostring()
 
-    def calculate_fingerprints(self, images, parallel=None, log=None,
-                               calculate_derivatives=False):
+    def calculate_fingerprints(
+        self,
+        images,
+        parallel=None,
+        log=None,
+        calculate_derivatives=False,
+        neighborlist_keys=None,
+        fingerprints_keys=None,
+        ):
         """Calculates the fingerpints of the images, for the ones not already
         done.
 
@@ -171,7 +178,18 @@ class Gaussian(object):
             self.neighborlist = \
                 Data(filename='%s-neighborlists' % self.dblabel,
                      calculator=calc)
-        self.neighborlist.calculate_items(images, parallel=parallel, log=log)
+        if neighborlist_keys is None:
+            log("!!!!!!!!!!!!!!file open!!!!!!!!!!!!!!!!!")
+            self.neighborlist.open()
+            neighborlist_keys = set(self.neighborlist.d.keys())
+            self.neighborlist.close()
+        neighborlist_keys = \
+            self.neighborlist.calculate_items(
+                images,
+                parallel=parallel,
+                log=log,
+                db_keys=neighborlist_keys,
+                )
         log('...neighborlists calculated.', toc='nl')
 
         log('Fingerprinting images...', tic='fp')
@@ -183,7 +201,18 @@ class Gaussian(object):
             self.fingerprints = Data(filename='%s-fingerprints'
                                      % self.dblabel,
                                      calculator=calc)
-        self.fingerprints.calculate_items(images, parallel=parallel, log=log)
+        if fingerprints_keys is None:
+            log("!!!!!!!!!!!!!!!!file open!!!!!!!!!!!!!!!!!")
+            self.fingerprints.open()
+            fingerprints_keys = set(self.fingerprints.d.keys())
+            self.fingerprints.close()
+        fingerprints_keys = \
+            self.fingerprints.calculate_items(
+                images,
+                parallel=parallel,
+                log=log,
+                db_keys=fingerprints_keys,
+                )
         log('...fingerprints calculated.', toc='fp')
 
         if calculate_derivatives:
@@ -202,6 +231,7 @@ class Gaussian(object):
             self.fingerprintprimes.calculate_items(
                 images, parallel=parallel, log=log)
             log('...fingerprint derivatives calculated.', toc='derfp')
+        return neighborlist_keys, fingerprints_keys
 
 
 # Calculators #################################################################
