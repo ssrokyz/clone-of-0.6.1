@@ -600,7 +600,7 @@ def get_hash(atoms):
     """Creates a unique signature for a particular ASE atoms object.
 
     This is used to check whether an image has been seen before. This is just
-    an md5 hash of a string representation of the atoms object.
+    an md5 hash of a *** string representation of the atoms *** object.
 
     Parameters
     ----------
@@ -611,6 +611,7 @@ def get_hash(atoms):
     -------
         Hash string key of 'atoms'.
     """
+    ##### string : pbc + cell + atom order + position
     string = str(atoms.pbc)
     for number in atoms.cell.flatten():
         string += '%.15f' % number
@@ -618,6 +619,7 @@ def get_hash(atoms):
     for number in atoms.get_positions().flatten():
         string += '%.15f' % number
 
+    ####### md5 is one of hash algorithm
     md5 = hashlib.md5(string.encode('utf-8'))
     hash = md5.hexdigest()
     return hash
@@ -637,11 +639,13 @@ def hash_images(images, log=None, ordered=False):
         log = Logger(None)
     if images is None:
         return
+    ############# images alread have keys
     elif hasattr(images, 'keys'):
         log(' %i unique images after hashing.' % len(images))
         return images  # Apparently already hashed.
+    ############ else
     else:
-        # Need to be hashed, and possibly read from file.
+        ########## Need to be hashed, and possibly read from file.
         if isinstance(images, str):
             log('Attempting to read images from file %s.' %
                 images)
@@ -653,7 +657,9 @@ def hash_images(images, log=None, ordered=False):
                 images = [row.toatoms() for row in
                           connect(images, 'db').select(None)]
 
-        # images converted to dictionary form; key is hash of image.
+        ####### images converted to dictionary form; 
+        #########    key is hash of image.
+        ####### i.e. hash is keys for images
         log('Hashing images...', tic='hash')
         dict_images = MetaDict()
         dict_images.metadata['duplicates'] = {}
@@ -662,6 +668,7 @@ def hash_images(images, log=None, ordered=False):
             from collections import OrderedDict
             dict_images = OrderedDict()
         for image in images:
+            ########### get_hash make hash for an atom object
             hash = get_hash(image)
             if hash in dict_images.keys():
                 log('Warning: Duplicate image (based on identical hash).'
@@ -1192,4 +1199,5 @@ class MetaDict(dict):
     """Dictionary that can also store metadata. Useful for images dictionary
     so that images can still be iterated by keys.
     """
+    ###### metadata : class variable ??
     metadata = {}

@@ -920,10 +920,12 @@ class NeuralNetwork:
         self.log = log
 
         params = self.parameters
+        ################## define lossfunction
         lf = LossFunction(convergence=params['convergence'],
                           energy_coefficient=params['energy_coefficient'],
                           force_coefficient=params['force_coefficient'],
                           parallel={'cores': 1})
+        ############ attach model to lf
         if params['force_coefficient'] is not None:
             lf.attach_model(self,
                             images=trainingimages,
