@@ -257,6 +257,7 @@ class Amp(Calculator, object):
 
         if properties == ['energy']:
             log('Calculating potential energy...', tic='pot-energy')
+            ############### load neighborlist file list most recently used
             if hasattr(self, "neighborlist_keys"):
                 n_keys = self.neighborlist_keys
             else:
@@ -265,6 +266,7 @@ class Amp(Calculator, object):
                 f_keys = self.fingerprints_keys
             else:
                 f_keys = None
+            ############# update neighborlists & fingerprints file lists
             self.neighborlist_keys, self.fingerprints_keys = \
                 self.descriptor.calculate_fingerprints(
                     images=images,

@@ -178,6 +178,7 @@ class Gaussian(object):
             self.neighborlist = \
                 Data(filename='%s-neighborlists' % self.dblabel,
                      calculator=calc)
+        ########### severe bottle neck
         if neighborlist_keys is None:
             log("!!!!!!!!!!!!!!file open!!!!!!!!!!!!!!!!!")
             self.neighborlist.open()
@@ -201,6 +202,7 @@ class Gaussian(object):
             self.fingerprints = Data(filename='%s-fingerprints'
                                      % self.dblabel,
                                      calculator=calc)
+        ########### severe bottle neck
         if fingerprints_keys is None:
             log("!!!!!!!!!!!!!!!!file open!!!!!!!!!!!!!!!!!")
             self.fingerprints.open()

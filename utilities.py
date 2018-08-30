@@ -292,6 +292,7 @@ class FileDatabase:
         """
         return
 
+    ################### cause severe bottle-neck
     def keys(self):
         """Return list of keys, both of in-memory and out-of-memory
         items.
@@ -413,7 +414,7 @@ class Data:
             self.d = None
         log(' Data stored in file %s.' % self.filename)
         ############ read list of data
-        if db_keys is None:
+        if db_keys is None: ########### severe bottle-neck
             # log("original", tic='dbkeys')
             d = self.db.open(self.filename, 'read')
             calcs_needed = list(set(images.keys()).difference(d.keys()))
