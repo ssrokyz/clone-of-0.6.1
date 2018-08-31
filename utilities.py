@@ -412,30 +412,26 @@ class Data:
         if self.d is not None:
             self.d.close()
             self.d = None
-        log(' Data stored in file %s.' % self.filename)
         ############ read list of data
-        if db_keys is None: ########### severe bottle-neck
-            # log("original", tic='dbkeys')
-            d = self.db.open(self.filename, 'read')
-            calcs_needed = list(set(images.keys()).difference(d.keys()))
-            dblength = len(d)
-            d.close()
-            # log("original", toc='dbkeys')
-        else:
-            # log("revised", tic='dbkeys')
-            dblength = len(db_keys)
-            calcs_needed = list(set(images.keys()).difference(db_keys))
-            db_keys = db_keys.union(set(images.keys()))
-            # log("revised", toc='dbkeys')
+        log(' Data stored in file %s.' % self.filename)
+        ############ was severe bottle-neck
+        # log("original", tic='dbkeys')
+        # d = self.db.open(self.filename, 'read')
+        # calcs_needed = list(set(images.keys()).difference(d.keys()))
+        # dblength = len(d)
+        # d.close()
+        # log("original", toc='dbkeys')
+        # log("revised", tic='dbkeys')
+        dblength = len(db_keys)
+        calcs_needed = list(set(images.keys()).difference(db_keys))
+        db_keys = db_keys.union(set(images.keys()))
+        # log("revised", toc='dbkeys')
         ################# calculate
         log(' File exists with %i total images, %i of which are needed.' %
             (dblength, len(images) - len(calcs_needed)))
         log(' %i new calculations needed.' % len(calcs_needed))
         if len(calcs_needed) == 0:
-            if db_keys is None:
-                calc_needed = [list(images.keys())[0]]
-            else:
-                return
+            return db_keys
         if parallel['cores'] == 1:
             d = self.db.open(self.filename, 'create')
             for key in calcs_needed:
