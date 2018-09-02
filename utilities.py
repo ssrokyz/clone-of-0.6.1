@@ -641,7 +641,7 @@ def get_hash(atoms):
     return hash
 
 
-def hash_images(images, log=None, ordered=False):
+def hash_images(images, log=None, ordered=False, list_seq=False):
     """ Converts input images -- which may be a list, a trajectory file, or
     a database -- into a dictionary indexed by their hashes.
 
@@ -683,9 +683,14 @@ def hash_images(images, log=None, ordered=False):
         if ordered is True:
             from collections import OrderedDict
             dict_images = OrderedDict()
+        if list_seq:
+            seq_list = []
+
         for image in images:
             ########### get_hash make hash for an atom object
             hash = get_hash(image)
+            if list_seq:
+                seq_list.append(hash)
             if hash in dict_images.keys():
                 log('Warning: Duplicate image (based on identical hash).'
                     ' Was this expected? Hash: %s' % hash)
@@ -696,7 +701,10 @@ def hash_images(images, log=None, ordered=False):
             dict_images[hash] = image
         log(' %i unique images after hashing.' % len(dict_images))
         log('...hashing completed.', toc='hash')
-        return dict_images
+        if list_seq:
+            return dict_images, seq_list
+        else:
+            return dict_images
 
 
 def check_images(images, forces):

@@ -1413,11 +1413,21 @@ class NeuralNetwork:
         if nsamples == 1: ## ssrokyz start
             energies, atomic_energies = \
                 self.sess.run([self.energy, self.energies], feed_dict=feedinput)
-            energies = np.array(energies) + self.parameters['energyMeanScale']
-            atomic_energies = np.array(atomic_energies) + self.parameters['energyMeanScale'] / natoms
-            # energies = \
-                # np.array(self.sess.run(self.energy, feed_dict=feedinput)) + \
-                # self.parameters['energyMeanScale'] ## ssrokyz end
+            energies = np.squeeze(np.array(energies) + self.parameters['energyMeanScale'])
+            atomic_energies = np.array(atomic_energies) + \
+                np.repeat(
+                    self.parameters['energyMeanScale'] / natoms,
+                    np.squeeze(natoms.astype(int)), axis=0
+                    )
+            ########## reshape arrays in aspects of images 
+            ########## (may have different atom number)
+            reshape = []
+            accum = 0
+            for i in range(len(natoms)):
+                natom = int(natoms[i][0])
+                reshape.append(np.squeeze(atomic_energies[accum : accum + natom]))
+                accum += natom
+            atomic_energies = np.array(reshape)
 
             # Add in the per-atom base energy.
             natomsArray = np.zeros((len(hashs), len(self.elements)))
@@ -1434,23 +1444,39 @@ class NeuralNetwork:
         else:
             energysave = []
             forcesave = []
+            atomic_energysave = []
             # Add in the per-atom base energy.
             natomsArray = np.zeros((len(hashs), len(self.elements)))
             for i in range(len(hashs)):
                 for j in range(len(self.elements)):
                     natomsArray[i][j] = nAtomsDict[self.elements[j]][i]
             for samplenum in range(nsamples):
-                energies = \
-                    np.array(self.sess.run(self.energy,
-                                           feed_dict=feedinput)) + \
-                    self.parameters['energyMeanScale']
+                energies, atomic_energies = \
+                    self.sess.run([self.energy, self.energies], feed_dict=feedinput)
+                energies = np.squeeze(np.array(energies) + self.parameters['energyMeanScale'])
+                atomic_energies = np.array(atomic_energies) + \
+                    np.repeat(
+                        self.parameters['energyMeanScale'] / natoms,
+                        np.squeeze(natoms.astype(int)), axis=0
+                        )
+                reshape = []
+                accum = 0
+                for i in range(len(natoms)):
+                    natom = int(natoms[i][0])
+                    reshape.append(np.squeeze(atomic_energies[accum : accum + natom]))
+                    accum += natom
+                atomic_energies = reshape
+
                 energysave.append([x[0] for x in energies])
+                atomic_energysave = \
+                    atomic_energysave.append(atomic_energies)
                 if forces:
                     force = self.sess.run(self.forces,
                                           feed_dict=feedinput)
                     forcesave.append(reorganizeForces(force, natoms))
             energies = np.array(energysave)
             force = np.array(forcesave)
+            atomic_energies = np.array(atomic_energysave)
 
         return energies, force, atomic_energies ## ssrokyz
 
@@ -1459,7 +1485,7 @@ class NeuralNetwork:
         is more efficient for anything greater than 1 image)."""
         key = '1'
         energies, forces, self.atomic_energies = self.get_energy_list([key], {key: fingerprint}) ## ssrokyz
-        return energies[0]
+        return energies
 
     def get_atomic_energies(self): ## ssrokyz start
         """Get the atomic energies by feeding in a list to the get_list version (which

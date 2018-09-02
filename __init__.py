@@ -253,7 +253,8 @@ class Amp(Calculator, object):
         log('Calculation requested.')
 
         images = hash_images([self.atoms])
-        key = list(images.keys())[0]
+        keys = list(images.keys())[0]
+
 
         if properties == ['energy']:
             log('Calculating potential energy...', tic='pot-energy')
@@ -276,8 +277,9 @@ class Amp(Calculator, object):
                     fingerprints_keys = f_keys,
                     # parallel = self._parallel,
                     )
+
             energy = self.model.calculate_energy(
-                self.descriptor.fingerprints[key])
+                self.descriptor.fingerprints[keys])
             self.results['energy'] = energy
             log('...potential energy calculated.', toc='pot-energy')
 
@@ -293,10 +295,61 @@ class Amp(Calculator, object):
                                                    calculate_derivatives=True)
             forces = \
                 self.model.calculate_forces(
-                    self.descriptor.fingerprints[key],
-                    self.descriptor.fingerprintprimes[key])
+                    self.descriptor.fingerprints[keys],
+                    self.descriptor.fingerprintprimes[keys])
             self.results['forces'] = forces
             log('...forces calculated.', toc='forces')
+
+
+    def calculateE_bunch(self, atoms_list):
+        """ Calculation of the energy of atoms in list. """
+        # The inherited method below just sets the atoms object,
+        # if specified, to self.atoms.
+        log = self._log
+        log('bunch of Calculation requested.')
+
+        images, seq_keys = hash_images(atoms_list, list_seq = True)
+
+        log('Calculating potential energy...', tic='pot-energy')
+        ############### load neighborlist file list most recently used
+        if hasattr(self, "neighborlist_keys"):
+            n_keys = self.neighborlist_keys
+        else:
+            n_keys = None
+        if hasattr(self, "fingerprints_keys"):
+            f_keys = self.fingerprints_keys
+        else:
+            f_keys = None
+        ############# update neighborlists & fingerprints file lists
+        self.neighborlist_keys, self.fingerprints_keys = \
+            self.descriptor.calculate_fingerprints(
+                images=images,
+                log=log,
+                calculate_derivatives=False,
+                neighborlist_keys = n_keys,
+                fingerprints_keys = f_keys,
+                parallel = self._parallel,
+                )
+        energies, force, atomic_energies = \
+            self.model.get_energy_list(
+                hashs = seq_keys,
+                fingerprintDB = self.descriptor.fingerprints,
+                )
+        log('...potential energy(parallel) calculated.', toc='pot-energy')
+
+        ########### omitted since I don't use it
+        # if properties == ['forces']:
+            # log('Calculating forces...', tic='forces')
+            # self.descriptor.calculate_fingerprints(images=images,
+                                                   # log=log,
+                                                   # calculate_derivatives=True)
+            # forces = \
+                # self.model.calculate_forces(
+                    # self.descriptor.fingerprints[keys],
+                    # self.descriptor.fingerprintprimes[keys])
+            # log('...forces calculated.', toc='forces')
+
+        return energies
 
     def train(self,
               images,
