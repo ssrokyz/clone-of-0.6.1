@@ -113,6 +113,7 @@ class Gaussian(object):
         calculate_derivatives=False,
         neighborlist_keys=None,
         fingerprints_keys=None,
+        fingerprintprimes_keys=None,
         ):
         """Calculates the fingerpints of the images, for the ones not already
         done.
@@ -230,10 +231,23 @@ class Gaussian(object):
                     Data(filename='%s-fingerprint-primes'
                          % self.dblabel,
                          calculator=calc)
-            self.fingerprintprimes.calculate_items(
-                images, parallel=parallel, log=log)
+            ########### severe bottle neck
+            if fingerprintprimes_keys is None:
+                log("!!!!!!!!!!!!!!!!file open!!!!!!!!!!!!!!!!!")
+                self.fingerprintprimes.open()
+                fingerprintprimes_keys = set(self.fingerprintprimes.d.keys())
+                self.fingerprintprimes.close()
+            fingerprintprimes_keys = \
+                self.fingerprintprimes.calculate_items(
+                    images,
+                    parallel=parallel,
+                    log=log,
+                    db_keys=fingerprintprimes_keys,
+                    )
             log('...fingerprint derivatives calculated.', toc='derfp')
-        return neighborlist_keys, fingerprints_keys
+            return neighborlist_keys, fingerprints_keys, fingerprintprimes_keys
+        else:
+            return neighborlist_keys, fingerprints_keys
 
 
 # Calculators #################################################################

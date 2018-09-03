@@ -111,8 +111,18 @@ class Zernike(object):
         be used to restart the calculator."""
         return self.parameters.tostring()
 
-    def calculate_fingerprints(self, images, parallel=None, log=None,
-                               calculate_derivatives=False):
+    # def calculate_fingerprints(self, images, parallel=None, log=None,
+                               # calculate_derivatives=False):
+    def calculate_fingerprints(
+        self,
+        images,
+        parallel=None,
+        log=None,
+        calculate_derivatives=False,
+        neighborlist_keys=None,
+        fingerprints_keys=None,
+        fingerprintprimes_keys=None,
+        ):
         """Calculates the fingerpints of the images, for the ones not already
         done.
 
@@ -196,10 +206,22 @@ class Zernike(object):
         log('Calculating neighborlists...', tic='nl')
         if not hasattr(self, 'neighborlist'):
             calc = NeighborlistCalculator(cutoff=p.cutoff['kwargs']['Rc'])
-            self.neighborlist = Data(filename='%s-neighborlists'
-                                     % self.dblabel,
-                                     calculator=calc)
-        self.neighborlist.calculate_items(images, parallel=parallel, log=log)
+            self.neighborlist = \
+                Data(filename='%s-neighborlists' % self.dblabel,
+                     calculator=calc)
+        ########### severe bottle neck
+        if neighborlist_keys is None:
+            log("!!!!!!!!!!!!!!file open!!!!!!!!!!!!!!!!!")
+            self.neighborlist.open()
+            neighborlist_keys = set(self.neighborlist.d.keys())
+            self.neighborlist.close()
+        neighborlist_keys = \
+            self.neighborlist.calculate_items(
+                images,
+                parallel=parallel,
+                log=log,
+                db_keys=neighborlist_keys,
+                )
         log('...neighborlists calculated.', toc='nl')
 
         log('Fingerprinting images...', tic='fp')
@@ -212,11 +234,23 @@ class Zernike(object):
             self.fingerprints = Data(filename='%s-fingerprints'
                                      % self.dblabel,
                                      calculator=calc)
-        self.fingerprints.calculate_items(images, parallel=parallel, log=log)
+        ########### severe bottle neck
+        if fingerprints_keys is None:
+            log("!!!!!!!!!!!!!!!!file open!!!!!!!!!!!!!!!!!")
+            self.fingerprints.open()
+            fingerprints_keys = set(self.fingerprints.d.keys())
+            self.fingerprints.close()
+        fingerprints_keys = \
+            self.fingerprints.calculate_items(
+                images,
+                parallel=parallel,
+                log=log,
+                db_keys=fingerprints_keys,
+                )
         log('...fingerprints calculated.', toc='fp')
 
         if calculate_derivatives:
-            log('Calculating fingerprint derivatives of images...',
+            log('Calculating fingerprint derivatives...',
                 tic='derfp')
             if not hasattr(self, 'fingerprintprimes'):
                 calc = \
@@ -229,9 +263,23 @@ class Zernike(object):
                     Data(filename='%s-fingerprint-primes'
                          % self.dblabel,
                          calculator=calc)
-            self.fingerprintprimes.calculate_items(
-                images, parallel=parallel, log=log)
+            ########### severe bottle neck
+            if fingerprintprimes_keys is None:
+                log("!!!!!!!!!!!!!!!!file open!!!!!!!!!!!!!!!!!")
+                self.fingerprintprimes.open()
+                fingerprintprimes_keys = set(self.fingerprintprimes.d.keys())
+                self.fingerprintprimes.close()
+            fingerprintprimes_keys = \
+                self.fingerprintprimes.calculate_items(
+                    images,
+                    parallel=parallel,
+                    log=log,
+                    db_keys=fingerprintprimes_keys,
+                    )
             log('...fingerprint derivatives calculated.', toc='derfp')
+            return neighborlist_keys, fingerprints_keys, fingerprintprimes_keys
+        else:
+            return neighborlist_keys, fingerprints_keys
 
 
 # Calculators #################################################################
