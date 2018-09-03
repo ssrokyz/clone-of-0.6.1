@@ -1485,7 +1485,7 @@ class NeuralNetwork:
         is more efficient for anything greater than 1 image)."""
         key = '1'
         energies, forces, self.atomic_energies = self.get_energy_list([key], {key: fingerprint}) ## ssrokyz
-        return energies
+        return float(energies)
 
     def get_atomic_energies(self): ## ssrokyz start
         """Get the atomic energies by feeding in a list to the get_list version (which

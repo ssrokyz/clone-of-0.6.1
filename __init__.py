@@ -301,7 +301,7 @@ class Amp(Calculator, object):
             log('...forces calculated.', toc='forces')
 
 
-    def calculateE_bunch(self, atoms_list):
+    def calculateE_bunch(self, atoms_list, parallel = True):
         """ Calculation of the energy of atoms in list. """
         # The inherited method below just sets the atoms object,
         # if specified, to self.atoms.
@@ -328,7 +328,7 @@ class Amp(Calculator, object):
                 calculate_derivatives=False,
                 neighborlist_keys = n_keys,
                 fingerprints_keys = f_keys,
-                parallel = self._parallel,
+                parallel = self._parallel if parallel else None,
                 )
         energies, force, atomic_energies = \
             self.model.get_energy_list(
