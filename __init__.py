@@ -253,7 +253,7 @@ class Amp(Calculator, object):
         log('Calculation requested.')
 
         images = hash_images([self.atoms])
-        keys = list(images.keys())[0]
+        key = list(images.keys())[0]
 
 
         if properties == ['energy']:
@@ -275,11 +275,10 @@ class Amp(Calculator, object):
                     calculate_derivatives=False,
                     neighborlist_keys = n_keys,
                     fingerprints_keys = f_keys,
-                    # parallel = self._parallel,
                     )
 
             energy = self.model.calculate_energy(
-                self.descriptor.fingerprints[keys])
+                self.descriptor.fingerprints[key])
             self.results['energy'] = energy
             log('...potential energy calculated.', toc='pot-energy')
 
@@ -295,8 +294,8 @@ class Amp(Calculator, object):
                                                    calculate_derivatives=True)
             forces = \
                 self.model.calculate_forces(
-                    self.descriptor.fingerprints[keys],
-                    self.descriptor.fingerprintprimes[keys])
+                    self.descriptor.fingerprints[key],
+                    self.descriptor.fingerprintprimes[key])
             self.results['forces'] = forces
             log('...forces calculated.', toc='forces')
 
