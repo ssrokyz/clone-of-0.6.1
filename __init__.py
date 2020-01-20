@@ -74,7 +74,7 @@ class Amp(Calculator, object):
         ASE atoms objects with positions, symbols, energy, and forces in ASE
         format.
     """
-    implemented_properties = ['energy', 'forces', 'energies']  ## ssrokyz
+    implemented_properties = ['energy', 'forces', 'atomic_energies']  ## ssrokyz
 
     def __init__(self, descriptor, model, label='amp', dblabel=None,
                  cores=None, envcommand=None, logging=True, atoms=None):
@@ -94,7 +94,7 @@ class Amp(Calculator, object):
         self.dblabel = label if dblabel is None else dblabel
 
     # def get_atomic_potentials(self, atoms=None):  ## ssrokyz start
-        # return Calculator.get_property(self, 'energies', atoms)  ## ssrokyz end
+        # return Calculator.get_property(self, 'atomic_energies', atoms)  ## ssrokyz end
 
     @property
     def cores(self):
@@ -282,10 +282,10 @@ class Amp(Calculator, object):
             self.results['energy'] = energy
             log('...potential energy calculated.', toc='pot-energy')
 
-        if properties == ['energies']:  ## ssrokyz start
-            log('Getting atomic potentails...', tic='pot-energies')
-            self.results['energies'] = self.model.get_atomic_energies()
-            log('...atomic potentials calculated.', toc = 'pot-energies') ## ssrokyz end
+        if properties == ['atomic_energies']:  ## ssrokyz start
+            log('Getting atomic potentails...', tic='atomic_energies')
+            self.results['atomic_energies'] = self.model.get_atomic_energies()
+            log('...atomic potentials calculated.', toc = 'atomic_energies') ## ssrokyz end
 
         if properties == ['forces']:
             log('Calculating forces...', tic='forces')
